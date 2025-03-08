@@ -37,6 +37,8 @@ const Chat = () => {
       setError(null);
       
       try {
+        
+        console.log(`${API_BASE_URL}/start-session`);
         const response = await axios.post(`${API_BASE_URL}/start-session`);
         setSessionId(response.data.session_id);
         setIsConnecting(false);
@@ -46,7 +48,8 @@ const Chat = () => {
           `无法连接到服务器 (${error.message})。请确保：\n` +
           '1. 服务器已启动\n' +
           '2. 设备与服务器在同一网络下\n' +
-          '3. 使用正确的服务器地址'
+          '3. 使用正确的服务器地址'+
+          '4. 检查API_BASE_URL为：'+API_BASE_URL
         );
         setIsConnecting(false);
       }
@@ -97,9 +100,9 @@ const Chat = () => {
     setInput('');
     setIsLoading(true);
     setError(null);
-
+    console.log('发送请求到后端，消息内容:console.log("API_BASE_URL！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！",API_BASE_URL);', [...messages, userMessage]);
     try {
-      console.log('发送请求到后端，消息内容:', [...messages, userMessage]);
+      console.log('发送请求到后端，消息内容:console.log("API_BASE_URL！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！",API_BASE_URL);', [...messages, userMessage]);
       
       const response = await axios.post(`${API_BASE_URL}/chat`, {
         session_id: sessionId,
@@ -154,7 +157,8 @@ const Chat = () => {
 
   // 添加特殊祝福处理函数
    const handleSpecialGreeting = async () => {
-    const specialPrompt = '你是一只可爱的小浣熊，你现在要祝你的女朋友三八妇女节快乐，请称呼她为"蛙蛙"，并自称"熊熊"';
+    //const specialPrompt = '你是一只可爱的小浣熊，你现在要祝你的女朋友三八妇女节快乐，请称呼她为"蛙蛙"，并自称"熊熊"';
+    const specialPrompt = '你是一个法律助手，下面请结合用户的问题，给出专业的法律建议';
     setSystemPrompt(specialPrompt);
     
     try {
@@ -169,7 +173,7 @@ const Chat = () => {
         session_id: sessionId,
         messages: [{
           role: "user",
-          content: "请开始你的节日祝福"
+          content: "请做一段简短的自我介绍，1体现自己的专业性"
         }]
       });
 
@@ -297,7 +301,7 @@ const Chat = () => {
               >
                 <span className="flex items-center justify-center">
                   <span className="mr-2">🎀</span>
-                  给蛙蛙的小惊喜
+                  法律助手专业版
                   <span className="ml-2">💝</span>
                 </span>
               </button>
