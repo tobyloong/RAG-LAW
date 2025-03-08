@@ -1,0 +1,61 @@
+@import url('https://fonts.googleapis.com/css2?family=Mochiy+Pop+One&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: 'YouYuan';
+  src: local('YouYuan');
+  font-display: swap;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* 自定义字体类 */
+.font-cute {
+  font-family: 'YouYuan', '幼圆', 'STZhongsong', '华文中宋', sans-serif;
+  letter-spacing: 1px;
+}
+
+/* 添加可爱的输入框样式 */
+.input-cute {
+  @apply border-2 border-teal-300 focus:border-teal-400 focus:ring-2 focus:ring-teal-200;
+  @apply rounded-lg px-4 py-2;
+  @apply transition-all duration-300;
+}
+
+/* 添加消息气泡可爱样式 */
+.message-bubble {
+  @apply rounded-2xl px-6 py-4;
+  @apply shadow-md;
+  @apply transition-all duration-300;
+}
+
+.message-bubble-user {
+  @apply bg-teal-400 text-white;
+  @apply rounded-tr-none;
+}
+
+.message-bubble-assistant {
+  @apply bg-white/90 text-teal-800;
+  @apply rounded-tl-none;
+}
+
+/* 添加标题特殊样式 */
+.title-shadow {
+  text-shadow: 1px 1px 2px rgba(0, 150, 136, 0.1);
+}
