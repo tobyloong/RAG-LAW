@@ -1,18 +1,28 @@
 import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
+import MarkdownRenderer from './MarkdownRenderer';
 
 // 获取当前环境的API地址
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://47.95.196.212:5000';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 // 更新默认背景图片为小清新风格
 const DEFAULT_BG = 'https://source.unsplash.com/1920x1080/?pastel,minimal,nature';
+const LAW_BG = '/law.jpg'; // 使用本地法律背景图片
 
 // 定义主题色
-const THEME = {
+const DEFAULT_THEME = {
   primary: 'bg-teal-400 hover:bg-teal-500',    // 主要按钮颜色
-  secondary: 'bg-teal-300 hover:bg-teal-400',   // 次要按钮颜色（替换原来的粉色）
+  secondary: 'bg-teal-300 hover:bg-teal-400',   // 次要按钮颜色
   text: 'text-teal-600',                        // 主文字颜色
   subtext: 'text-teal-500',                     // 副标题文字颜色
+};
+
+// 定义法律助手主题色
+const LAW_THEME = {
+  primary: 'bg-red-300 hover:bg-red-400',      // 浅红色主要按钮
+  secondary: 'bg-red-200 hover:bg-red-300',    // 浅红色次要按钮
+  text: 'text-red-700',                        // 主文字颜色
+  subtext: 'text-red-500',                     // 副标题文字颜色
 };
 
 const Chat = () => {
@@ -29,6 +39,12 @@ const Chat = () => {
   const fileInputRef = useRef(null);
   const [isConnecting, setIsConnecting] = useState(true);
   const [retryCount, setRetryCount] = useState(0);
+  const [isLawMode, setIsLawMode] = useState(false);
+  const THEME = isLawMode ? LAW_THEME : DEFAULT_THEME;
+  const [relatedCases, setRelatedCases] = useState([]);
+  const [showCases, setShowCases] = useState(false);
+  const [isDeepThinking, setIsDeepThinking] = useState(false);
+  const [selectedCitation, setSelectedCitation] = useState(null);
 
   // 修改初始化会话函数
   useEffect(() => {
@@ -100,13 +116,12 @@ const Chat = () => {
     setInput('');
     setIsLoading(true);
     setError(null);
-    console.log('发送请求到后端，消息内容:console.log("API_BASE_URL！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！",API_BASE_URL);', [...messages, userMessage]);
+    
     try {
-      console.log('发送请求到后端，消息内容:console.log("API_BASE_URL！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！",API_BASE_URL);', [...messages, userMessage]);
-      
       const response = await axios.post(`${API_BASE_URL}/chat`, {
         session_id: sessionId,
-        messages: [...messages, userMessage]
+        messages: [...messages, userMessage],
+        deep_thinking: isDeepThinking  // 添加深度思考标志
       }, {
         timeout: 120000,
         headers: {
@@ -114,10 +129,8 @@ const Chat = () => {
         }
       });
 
-      console.log('收到后端响应:', response.data);
-
-      if (!response.data || !response.data.choices || !response.data.choices[0]) {
-        throw new Error('后端返回数据格式不正确');
+      if (response.data.related_cases) {
+        setRelatedCases(response.data.related_cases);
       }
 
       const assistantMessage = {
@@ -155,41 +168,49 @@ const Chat = () => {
     setBackgroundImage(DEFAULT_BG);
   };
 
-  // 添加特殊祝福处理函数
-   const handleSpecialGreeting = async () => {
-    //const specialPrompt = '你是一只可爱的小浣熊，你现在要祝你的女朋友三八妇女节快乐，请称呼她为"蛙蛙"，并自称"熊熊"';
-    const specialPrompt = '你是一个法律助手，下面请结合用户的问题，给出专业的法律建议';
+  // 修改特殊祝福处理函数为法律助手模式
+  const handleSpecialGreeting = async () => {
+    const specialPrompt = '你是一个专业的法律顾问，请基于提供的相关案例和法律知识，为用户提供专业、准确的法律建议。请确保回答：1. 引用相关法律条款，2. 分析具体情况，3. 给出明确建议。';
     setSystemPrompt(specialPrompt);
+    setIsLawMode(true); // 设置为法律助手模式
+    setBackgroundImage(LAW_BG); // 切换背景图片
     
     try {
-      // 设置系统提示词
+      // 设置系统提示词，并标记为法律模式
       await axios.post(`${API_BASE_URL}/set-system-prompt`, {
         session_id: sessionId,
-        system_prompt: specialPrompt
+        system_prompt: specialPrompt,
+        is_law_mode: true
       });
       
-      // 直接触发一条问候消息
-      const response = await axios.post(`${API_BASE_URL}/chat`, {
-        session_id: sessionId,
-        messages: [{
-          role: "user",
-          content: "请做一段简短的自我介绍，1体现自己的专业性"
-        }]
-      });
-
-      if (response.data && response.data.choices && response.data.choices[0]) {
-        setMessages([{
-          role: 'assistant',
-          content: response.data.choices[0].message.content
-        }]);
-      }
+      // 直接设置一条固定的欢迎消息
+      const welcomeMessage = {
+        role: 'assistant',
+        content: '您好！我是您的法律助手。我可以帮您分析法律文件，解答法律问题，并提供专业的法律建议。我会基于相关法律条款和案例进行分析，为您提供清晰的解释和具体的建议。\n\n请问您有什么法律问题需要咨询吗？'
+      };
       
+      setMessages([welcomeMessage]);
       setIsInitialSetup(false);
     } catch (error) {
-      setError('设置特殊祝福失败');
+      setError('设置法律助手模式失败');
       console.error('Special greeting error:', error);
     }
-   };
+  };
+
+  // 添加处理引用点击的函数
+  const handleCitationClick = (citationId) => {
+    setShowCases(true);  // 打开右侧案例面板
+    setSelectedCitation(citationId);  // 设置选中的引用
+    // 使用 setTimeout 确保面板打开后再滚动
+    setTimeout(() => {
+      const element = document.getElementById(`case-${citationId}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth' });
+        element.classList.add('bg-yellow-100');  // 添加高亮效果
+        setTimeout(() => element.classList.remove('bg-yellow-100'), 2000);  // 2秒后移除高亮
+      }
+    }, 100);
+  };
 
   // 背景设置面板
   const BackgroundSettings = () => (
@@ -217,6 +238,40 @@ const Chat = () => {
       </div>
     </div>
   );
+
+  // 修改 RelatedCases 组件
+  const RelatedCases = () => {
+    if (!relatedCases || relatedCases.length === 0) return null;
+
+    return (
+      <div className={`fixed right-4 top-20 bg-white/90 backdrop-blur-sm p-4 rounded-lg shadow-lg transition-all ${showCases ? 'w-96' : 'w-12'}`}>
+        <button
+          onClick={() => setShowCases(!showCases)}
+          className={`${THEME.primary} text-white px-3 py-1 rounded-lg mb-2 w-full flex items-center justify-between`}
+        >
+          <span className={showCases ? '' : 'hidden'}>相关案例 ({relatedCases.length})</span>
+          <span className={showCases ? 'hidden' : ''}>📚</span>
+          <span>{showCases ? '收起' : ''}</span>
+        </button>
+        {showCases && (
+          <div className="space-y-2 max-h-[70vh] overflow-y-auto">
+            {relatedCases.map((caseItem, index) => (
+              <div 
+                key={index} 
+                id={`case-${index + 1}`}
+                className={`border border-gray-200 rounded p-2 transition-all duration-300 ${
+                  selectedCitation === (index + 1) ? 'ring-2 ring-red-300' : ''
+                }`}
+              >
+                <div className="font-bold mb-1">案例 {index + 1}</div>
+                <div className="text-sm">{caseItem}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   if (isInitialSetup) {
     return (
@@ -293,16 +348,16 @@ const Chat = () => {
               {/* 添加特殊祝福按钮 */}
               <button
                 onClick={handleSpecialGreeting}
-                className="w-full px-6 py-4 bg-gradient-to-r from-teal-400 to-teal-500 text-white rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105 hover:shadow-xl"
+                className="w-full px-6 py-4 bg-gradient-to-r from-red-300 to-red-400 text-white rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105 hover:shadow-xl"
                 style={{ 
                   fontFamily: "'AlibabaPuHuiTi', system-ui, sans-serif",
                   letterSpacing: '2px'
                 }}
               >
                 <span className="flex items-center justify-center">
-                  <span className="mr-2">🎀</span>
+                  <span className="mr-2">⚖️</span>
                   法律助手专业版
-                  <span className="ml-2">💝</span>
+                  <span className="ml-2">📚</span>
                 </span>
               </button>
             </div>
@@ -323,7 +378,7 @@ const Chat = () => {
     >
       {/* 头部 */}
       <div className="bg-white/80 shadow-sm p-4 backdrop-blur-sm relative">
-        <h1 className="text-2xl font-bold text-center text-teal-600" 
+        <h1 className={`text-2xl font-bold text-center ${THEME.text}`}
             style={{ 
               fontFamily: "'AlibabaPuHuiTi', system-ui, sans-serif",
               letterSpacing: '1px'
@@ -333,7 +388,7 @@ const Chat = () => {
                style={{ 
                  fontFamily: "'AlibabaPuHuiTi', system-ui, sans-serif",
                }}>
-            小浣熊制作
+            {isLawMode ? '法律顾问模式' : '小浣熊制作'}
           </div>
         </h1>
         <button
@@ -373,11 +428,19 @@ const Chat = () => {
               <div
                 className={`inline-block message-bubble ${
                   message.role === 'user'
-                    ? 'message-bubble-user'
-                    : 'message-bubble-assistant'
+                    ? `message-bubble-user theme-${isLawMode ? 'law' : 'default'}`
+                    : `message-bubble-assistant theme-${isLawMode ? 'law' : 'default'}`
                 }`}
               >
-                {message.content}
+                {message.role === 'assistant' ? (
+                  <MarkdownRenderer 
+                    content={message.content} 
+                    citations={relatedCases}
+                    onCitationClick={handleCitationClick}
+                  />
+                ) : (
+                  message.content
+                )}
               </div>
             </div>
           ))
@@ -396,6 +459,9 @@ const Chat = () => {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* 添加 RelatedCases 组件 */}
+      <RelatedCases />
+
       {/* 输入区域 */}
       <form onSubmit={handleSubmit} className="p-4 bg-white/80 backdrop-blur-sm border-t border-gray-200">
         <div className="flex space-x-2">
@@ -406,6 +472,18 @@ const Chat = () => {
             className="flex-1 input-cute bg-white/90"
             placeholder="输入你的问题..."
           />
+          <button
+            type="button"
+            onClick={() => setIsDeepThinking(!isDeepThinking)}
+            className={`px-4 py-2 rounded-lg transition-all transform hover:scale-105 ${
+              isDeepThinking 
+              ? `${THEME.primary} text-white` 
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+            title="开启后将进行深度案例分析"
+          >
+            {isDeepThinking ? '🧠 深度' : '💭 普通'}
+          </button>
           <button
             type="submit"
             disabled={isLoading}

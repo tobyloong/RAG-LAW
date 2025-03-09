@@ -70,14 +70,27 @@ code {
   @apply transition-all duration-300;
 }
 
-.message-bubble-user {
+/* 用户消息气泡样式 */
+.message-bubble-user.theme-default {
   @apply bg-teal-400 text-white;
   @apply rounded-tr-none;
 }
 
-.message-bubble-assistant {
-  @apply bg-white/90 text-teal-800;
+.message-bubble-user.theme-law {
+  @apply bg-red-300 text-white;
+  @apply rounded-tr-none;
+}
+
+/* 助手消息气泡样式 */
+.message-bubble-assistant.theme-default {
+  @apply bg-white text-gray-800;
   @apply rounded-tl-none;
+}
+
+.message-bubble-assistant.theme-law {
+  @apply bg-white text-gray-800;
+  @apply rounded-tl-none;
+  @apply border-2 border-red-200;
 }
 
 /* 添加标题特殊样式 */
