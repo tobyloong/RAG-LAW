@@ -20,7 +20,9 @@ chat_sessions = {
     # session_id: {
     #     'messages': [],
     #     'system_prompt': None,
-    #     'is_law_mode': False  # 新增：是否为法律助手模式
+    #     'is_law_mode': False,  # 是否为法律助手模式
+    #     'law_cases_count': 3,  # 法条检索数量
+    #     'qa_cases_count': 3    # 问答检索数量
     # }
 }
 
@@ -54,13 +56,19 @@ def set_system_prompt():
         data = request.json
         session_id = data.get('session_id')
         system_prompt = data.get('system_prompt')
-        is_law_mode = data.get('is_law_mode', False)  # 新增：是否为法律助手模式
+        is_law_mode = data.get('is_law_mode', False)
+        law_cases_count = data.get('law_cases_count', 3)
+        qa_cases_count = data.get('qa_cases_count', 3)
         
         if not session_id or session_id not in chat_sessions:
             return jsonify({'error': '无效的会话ID'}), 400
             
-        chat_sessions[session_id]['system_prompt'] = system_prompt
-        chat_sessions[session_id]['is_law_mode'] = is_law_mode  # 保存模式状态
+        chat_sessions[session_id].update({
+            'system_prompt': system_prompt,
+            'is_law_mode': is_law_mode,
+            'law_cases_count': law_cases_count,
+            'qa_cases_count': qa_cases_count
+        })
         return jsonify({"status": "success"})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -71,22 +79,19 @@ def chat():
         data = request.json
         session_id = data.get('session_id')
         messages = data.get('messages', [])
-        deep_thinking = data.get('deep_thinking', False)  # 获取深度思考标志
+        deep_thinking = data.get('deep_thinking', False)
         
         if not session_id or session_id not in chat_sessions:
             return jsonify({'error': '无效的会话ID'}), 400
             
-        print(f"处理会话 {session_id} 的消息: {messages}")
-        print(f"深度思考模式: {deep_thinking}")
+        session = chat_sessions[session_id]
+        system_prompt = session['system_prompt']
+        is_law_mode = session['is_law_mode']
+        law_cases_count = session.get('law_cases_count', 3)
+        qa_cases_count = session.get('qa_cases_count', 3)
         
-        # 获取该会话的system prompt和模式
-        system_prompt = chat_sessions[session_id]['system_prompt']
-        is_law_mode = chat_sessions[session_id]['is_law_mode']
-        
-        # 初始化相关案例列表
         relevant_cases = []
         
-        # 如果是法律助手模式且开启了深度思考，使用RAG增强用户的最新问题
         if is_law_mode and deep_thinking and messages:
             latest_user_message = None
             for msg in reversed(messages):
@@ -95,10 +100,12 @@ def chat():
                     break
             
             if latest_user_message:
-                # 获取相关案例
-                relevant_cases = data_processor.find_relevant_cases(latest_user_message['content'])
+                relevant_cases = data_processor.find_relevant_cases(
+                    latest_user_message['content'],
+                    law_top_k=law_cases_count,
+                    qa_top_k=qa_cases_count
+                )
                 
-                # 构建增强的提示词
                 context = "搜索结果：\n\n"
                 for i, case in enumerate(relevant_cases, 1):
                     context += f"[文件 {i} 开始]\n{case}\n[文件 {i} 结束]\n\n"
@@ -123,19 +130,15 @@ def chat():
         # 构建完整的消息列表
         full_messages = []
         if system_prompt:
-            # 根据深度思考模式选择不同的系统提示词
-            if deep_thinking:
-                full_messages.append({
-                    "role": "system",
-                    "content": "你是一个乐于助人的人工智能助手，负责分析法律文件及相关内容。在回复时，请遵循以下准则：\n1. 在提供的搜索结果中，每份文件的格式为 [文件 X 开始]...[文件 X 结束]，其中 X 代表每份文件的数字索引。\n2. 引用文件时使用 [citation:X] 格式，其中 X 是文件编号，将引用直接放在相关信息之后。\n3. 在你的回复中要始终包含引用，而不是仅在结尾处。\n4. 如果信息来自多个文件，使用多个引用，例如 [citation:1][citation:2]。\n5. 并非所有的搜索结果都可能相关 —— 评估并仅使用相关信息。\n6. 对于较长的回复，要将其组织成清晰的段落或部分，以提高可读性。\n7. 如果你在提供的文件中找不到答案，请如实说明 —— 不要编造信息。\n8. 有些文件可能是非正式的讨论或百度知道的帖子 —— 相应地调整你的解读。\n9. 在你的回复中尽可能多地使用引用。"
-                })
-            else:
-                full_messages.append({
-                    "role": "system",
-                    "content": "你是一个专业的法律顾问，请为用户提供简洁、准确的法律建议。"
-                })
+            full_messages.append({
+                "role": "system",
+                "content": system_prompt  # 使用会话中保存的system prompt
+            })
         
-        full_messages.extend(messages)
+        # 只添加用户和助手的消息，不要重复添加system消息
+        for msg in messages:
+            if msg['role'] != 'system':  # 跳过消息列表中的system消息
+                full_messages.append(msg)
         
         # 更新会话历史
         chat_sessions[session_id]['messages'] = messages

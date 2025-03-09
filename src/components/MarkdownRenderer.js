@@ -44,8 +44,18 @@ const MarkdownRenderer = ({ content, citations = [], onCitationClick }) => {
       // 添加引用标签之前的文本
       parts.push(text.slice(lastIndex, match.index));
       
+      const citationIndex = parseInt(match[1]);
+      // 获取引用内容来判断类型
+      const citation = citations[citationIndex - 1] || '';
+      let citationType = '案例';
+      if (citation.startsWith('[法条')) {
+        citationType = '法条';
+      } else if (citation.startsWith('[问答')) {
+        citationType = '问答';
+      }
+      
       // 添加特殊的markdown标记
-      parts.push(`[📄引用${match[1]}](#citation-${match[1]})`);
+      parts.push(`[${citationType}${match[1]}](#citation-${match[1]})`);
       
       lastIndex = match.index + match[0].length;
     }
@@ -65,7 +75,7 @@ const MarkdownRenderer = ({ content, citations = [], onCitationClick }) => {
   const processedContent = processContent(content);
 
   return (
-    <div className="relative">
+    <div className="relative z-0">
       <ReactMarkdown
         remarkPlugins={[remarkMath]}
         rehypePlugins={[rehypeKatex]}
@@ -75,7 +85,7 @@ const MarkdownRenderer = ({ content, citations = [], onCitationClick }) => {
             const code = String(children).replace(/\n$/, '');
 
             return !inline && match ? (
-              <div className="relative group">
+              <div className="relative group z-0">
                 <SyntaxHighlighter
                   style={tomorrow}
                   language={match[1]}
@@ -105,7 +115,7 @@ const MarkdownRenderer = ({ content, citations = [], onCitationClick }) => {
               return (
                 <button
                   onClick={() => onCitationClick(id)}
-                  className="inline-flex items-center px-2 py-1 mx-1 text-xs font-medium text-gray-600 bg-gray-100 rounded hover:bg-gray-200 transition-colors"
+                  className="inline-flex items-center px-2 py-1 mx-1 text-xs font-medium text-gray-600 bg-gray-100 rounded hover:bg-gray-200 transition-colors z-0"
                 >
                   {children}
                 </button>
@@ -113,7 +123,7 @@ const MarkdownRenderer = ({ content, citations = [], onCitationClick }) => {
             }
             return (
               <a 
-                className="text-blue-500 hover:text-blue-700 underline" 
+                className="text-blue-500 hover:text-blue-700 underline z-0" 
                 target="_blank"
                 rel="noopener noreferrer"
                 href={href}

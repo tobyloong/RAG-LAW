@@ -85,12 +85,13 @@ class DataProcessor:
         
         print("所有嵌入向量计算完成")
 
-    def find_relevant_cases(self, query, top_k=3, similarity_threshold=0.3):
+    def find_relevant_cases(self, query, law_top_k=3, qa_top_k=3, similarity_threshold=0.3):
         """
         查找与查询最相关的案例
         :param query: 用户查询
-        :param top_k: 返回的相关案例数量
-        :param similarity_threshold: 相似度阈值，只返回相似度高于此值的案例
+        :param law_top_k: 返回的法条数量
+        :param qa_top_k: 返回的问答数量
+        :param similarity_threshold: 相似度阈值
         :return: 相关案例列表
         """
         # 计算查询的嵌入向量
@@ -108,18 +109,18 @@ class DataProcessor:
         # 筛选相似度高于阈值的案例
         law_mask = law_similarities > similarity_threshold
         law_indices = np.where(law_mask)[0]
-        # 如果有满足条件的案例，取top_k个最相关的
+        # 如果有满足条件的案例，取law_top_k个最相关的
         if len(law_indices) > 0:
-            law_indices = law_indices[np.argsort(law_similarities[law_indices])[-top_k:][::-1]]
+            law_indices = law_indices[np.argsort(law_similarities[law_indices])[-law_top_k:][::-1]]
         
         # 计算与问答数据的相似度
         qa_similarities = cosine_similarity(query_embedding, self.law_qa_embeddings)[0]
         # 筛选相似度高于阈值的问答
         qa_mask = qa_similarities > similarity_threshold
         qa_indices = np.where(qa_mask)[0]
-        # 如果有满足条件的问答，取top_k个最相关的
+        # 如果有满足条件的问答，取qa_top_k个最相关的
         if len(qa_indices) > 0:
-            qa_indices = qa_indices[np.argsort(qa_similarities[qa_indices])[-top_k:][::-1]]
+            qa_indices = qa_indices[np.argsort(qa_similarities[qa_indices])[-qa_top_k:][::-1]]
         
         # 获取相关案例
         relevant_laws = []
@@ -130,10 +131,12 @@ class DataProcessor:
         if len(qa_indices) > 0:
             relevant_qas = self.law_qa.iloc[qa_indices]['data'].tolist()
         
-        # 合并结果
+        # 合并结果并标记来源
         results = []
-        results.extend(relevant_laws)
-        results.extend(relevant_qas)
+        for i, law in enumerate(relevant_laws, 1):
+            results.append(f"[法条{i}] {law}")
+        for i, qa in enumerate(relevant_qas, 1):
+            results.append(f"[问答{i}] {qa}")
         
         return results
 

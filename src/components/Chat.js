@@ -45,6 +45,10 @@ const Chat = () => {
   const [showCases, setShowCases] = useState(false);
   const [isDeepThinking, setIsDeepThinking] = useState(false);
   const [selectedCitation, setSelectedCitation] = useState(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [lawCasesCount, setLawCasesCount] = useState(3);
+  const [qaCasesCount, setQaCasesCount] = useState(3);
+  const [activePanel, setActivePanel] = useState(null); // 'settings', 'background', 'cases', null
 
   // 修改初始化会话函数
   useEffect(() => {
@@ -84,10 +88,17 @@ const Chat = () => {
     if (!systemPrompt.trim() || !sessionId) return;
 
     try {
+      // 普通模式下使用用户输入的system prompt
       await axios.post(`${API_BASE_URL}/set-system-prompt`, {
         session_id: sessionId,
-        system_prompt: systemPrompt
+        system_prompt: systemPrompt,
+        is_law_mode: false,  // 明确指定非法律模式
+        law_cases_count: 3,
+        qa_cases_count: 3
       });
+      
+      // 直接进入对话界面，不添加欢迎消息
+      setMessages([]);
       setIsInitialSetup(false);
     } catch (error) {
       setError('设置系统提示词失败');
@@ -121,7 +132,9 @@ const Chat = () => {
       const response = await axios.post(`${API_BASE_URL}/chat`, {
         session_id: sessionId,
         messages: [...messages, userMessage],
-        deep_thinking: isDeepThinking  // 添加深度思考标志
+        deep_thinking: isDeepThinking,  // 添加深度思考标志
+        law_cases_count: lawCasesCount, // 添加法条检索数量
+        qa_cases_count: qaCasesCount    // 添加问答检索数量
       }, {
         timeout: 120000,
         headers: {
@@ -168,22 +181,22 @@ const Chat = () => {
     setBackgroundImage(DEFAULT_BG);
   };
 
-  // 修改特殊祝福处理函数为法律助手模式
+  // 修改特殊祝福处理函数，确保法律模式的独特性
   const handleSpecialGreeting = async () => {
     const specialPrompt = '你是一个专业的法律顾问，请基于提供的相关案例和法律知识，为用户提供专业、准确的法律建议。请确保回答：1. 引用相关法律条款，2. 分析具体情况，3. 给出明确建议。';
     setSystemPrompt(specialPrompt);
-    setIsLawMode(true); // 设置为法律助手模式
-    setBackgroundImage(LAW_BG); // 切换背景图片
+    setIsLawMode(true);
+    setBackgroundImage(LAW_BG);
     
     try {
-      // 设置系统提示词，并标记为法律模式
       await axios.post(`${API_BASE_URL}/set-system-prompt`, {
         session_id: sessionId,
         system_prompt: specialPrompt,
-        is_law_mode: true
+        is_law_mode: true,
+        law_cases_count: lawCasesCount,
+        qa_cases_count: qaCasesCount
       });
       
-      // 直接设置一条固定的欢迎消息
       const welcomeMessage = {
         role: 'assistant',
         content: '您好！我是您的法律助手。我可以帮您分析法律文件，解答法律问题，并提供专业的法律建议。我会基于相关法律条款和案例进行分析，为您提供清晰的解释和具体的建议。\n\n请问您有什么法律问题需要咨询吗？'
@@ -197,8 +210,30 @@ const Chat = () => {
     }
   };
 
-  // 添加处理引用点击的函数
+  // 修改面板开关处理函数
+  const handlePanelToggle = (panelName) => {
+    if (activePanel === panelName) {
+      setActivePanel(null);
+    } else {
+      // 关闭其他所有面板
+      setActivePanel(panelName);
+      setShowCases(false);  // 关闭相关案例面板
+    }
+  };
+
+  // 修改相关案例面板的开关处理
+  const handleCasesToggle = () => {
+    if (showCases) {
+      setShowCases(false);
+    } else {
+      setShowCases(true);
+      setActivePanel(null);  // 关闭其他设置面板
+    }
+  };
+
+  // 修改引用点击处理函数
   const handleCitationClick = (citationId) => {
+    setActivePanel(null);  // 关闭其他设置面板
     setShowCases(true);  // 打开右侧案例面板
     setSelectedCitation(citationId);  // 设置选中的引用
     // 使用 setTimeout 确保面板打开后再滚动
@@ -212,30 +247,117 @@ const Chat = () => {
     }, 100);
   };
 
-  // 背景设置面板
-  const BackgroundSettings = () => (
-    <div className="absolute top-16 right-4 bg-white rounded-lg shadow-lg p-4 z-10">
-      <div className="space-y-4">
-        <button
-          onClick={() => fileInputRef.current.click()}
-          className={`w-full px-4 py-2 ${THEME.primary} text-white rounded hover:bg-teal-500 transition-all transform hover:scale-105`}
-        >
-          选择图片
-        </button>
-        <button
-          onClick={resetBackground}
-          className="w-full px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
-        >
-          恢复默认
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handleBackgroundChange}
-          className="hidden"
-        />
+  // 添加点击空白处关闭面板的处理函数
+  const handleOverlayClick = (e) => {
+    if (e.target === e.currentTarget) {
+      setActivePanel(null);
+    }
+  };
+
+  // 更新设置按钮的点击处理
+  const handleSettingsClick = () => {
+    handlePanelToggle('settings');
+    setIsSettingsOpen(true);
+  };
+
+  const handleBackgroundClick = () => {
+    handlePanelToggle('background');
+    setIsCustomizingBg(true);
+  };
+
+  // 添加更新检索设置的函数
+  const updateSearchSettings = async (newLawCount, newQaCount) => {
+    try {
+      await axios.post(`${API_BASE_URL}/set-system-prompt`, {
+        session_id: sessionId,
+        system_prompt: systemPrompt,
+        is_law_mode: isLawMode,
+        law_cases_count: newLawCount,
+        qa_cases_count: newQaCount
+      });
+    } catch (error) {
+      console.error('更新检索设置失败:', error);
+    }
+  };
+
+  // 修改设置面板组件
+  const SearchSettings = () => (
+    <div className={`fixed right-4 top-20 bg-white/90 backdrop-blur-sm rounded-lg shadow-lg transition-all ${activePanel === 'settings' ? 'w-64 z-[60]' : 'w-6 z-[50]'}`}>
+      <div className={`${THEME.primary} text-white text-center text-xs py-1 rounded-t-lg cursor-pointer`}
+           onClick={() => handlePanelToggle('settings')}>
+        {activePanel === 'settings' ? '收起' : '⚙'}
       </div>
+      {activePanel === 'settings' && (
+        <div className="p-2 space-y-2">
+          <div className="bg-white">
+            <label className="block text-xs font-medium text-gray-700">
+              法条检索数量
+            </label>
+            <input
+              type="number"
+              min="1"
+              max="10"
+              value={lawCasesCount}
+              onChange={(e) => {
+                const newValue = parseInt(e.target.value);
+                setLawCasesCount(newValue);
+                updateSearchSettings(newValue, qaCasesCount);
+              }}
+              className="w-full px-2 py-1 text-sm border rounded focus:ring-2 focus:ring-red-200 focus:border-red-300 bg-white"
+            />
+          </div>
+          <div className="bg-white">
+            <label className="block text-xs font-medium text-gray-700">
+              问答检索数量
+            </label>
+            <input
+              type="number"
+              min="1"
+              max="10"
+              value={qaCasesCount}
+              onChange={(e) => {
+                const newValue = parseInt(e.target.value);
+                setQaCasesCount(newValue);
+                updateSearchSettings(lawCasesCount, newValue);
+              }}
+              className="w-full px-2 py-1 text-sm border rounded focus:ring-2 focus:ring-red-200 focus:border-red-300 bg-white"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // 修改背景设置面板
+  const BackgroundSettings = () => (
+    <div className={`fixed right-14 top-20 bg-white/90 backdrop-blur-sm rounded-lg shadow-lg transition-all ${activePanel === 'background' ? 'w-64 z-[60]' : 'w-6 z-[50]'}`}>
+      <div className={`${THEME.primary} text-white text-center text-xs py-1 rounded-t-lg cursor-pointer`}
+           onClick={() => handlePanelToggle('background')}>
+        {activePanel === 'background' ? '收起' : '🎨'}
+      </div>
+      {activePanel === 'background' && (
+        <div className="p-2 space-y-2">
+          <button
+            onClick={() => fileInputRef.current.click()}
+            className={`w-full px-2 py-1 text-sm ${THEME.primary} text-white rounded hover:bg-teal-500 transition-all`}
+          >
+            选择图片
+          </button>
+          <button
+            onClick={resetBackground}
+            className="w-full px-2 py-1 text-sm bg-gray-500 text-white rounded hover:bg-gray-600"
+          >
+            恢复默认
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleBackgroundChange}
+            className="hidden"
+          />
+        </div>
+      )}
     </div>
   );
 
@@ -243,28 +365,66 @@ const Chat = () => {
   const RelatedCases = () => {
     if (!relatedCases || relatedCases.length === 0) return null;
 
+    const formatContent = (content, index) => {
+      if (content.startsWith('[问答')) {
+        // 处理问答格式
+        const [question, answer] = content.split('\n').filter(Boolean);
+        // 移除[问答X]标记，并确保问题以"问："开头
+        const questionText = question.replace(/\[问答\d+\]\s*/, '');
+        const formattedQuestion = questionText.startsWith('问：') ? questionText : `问：${questionText}`;
+        return (
+          <div className="space-y-2">
+            <div className="font-bold text-gray-700">问答 {index}</div>
+            <div className="bg-gray-50 p-2 rounded-lg">
+              <div className="text-teal-600 font-medium">{formattedQuestion}</div>
+              <div className="mt-2 text-gray-700">答：{answer}</div>
+            </div>
+          </div>
+        );
+      } else if (content.startsWith('[法条')) {
+        // 处理法条格式
+        const lawContent = content.replace('[法条' + index + '] ', '');
+        const [lawName, lawText] = lawContent.split('：').map(s => s.trim());
+        return (
+          <div className="space-y-2">
+            <div className="font-bold text-gray-700">法条 {index}</div>
+            <div className="bg-red-50 p-2 rounded-lg">
+              <div className="text-red-600 font-medium">{lawName}</div>
+              <div className="mt-2 text-gray-700">{lawText}</div>
+            </div>
+          </div>
+        );
+      }
+      // 默认显示格式
+      return (
+        <div className="space-y-2">
+          <div className="font-bold text-gray-700">案例 {index}</div>
+          <div className="text-sm">{content}</div>
+        </div>
+      );
+    };
+
     return (
-      <div className={`fixed right-4 top-20 bg-white/90 backdrop-blur-sm p-4 rounded-lg shadow-lg transition-all ${showCases ? 'w-96' : 'w-12'}`}>
+      <div className={`fixed right-4 top-36 bg-white/90 backdrop-blur-sm p-4 rounded-lg shadow-lg transition-all ${showCases ? 'w-96' : 'w-8'}`}>
         <button
-          onClick={() => setShowCases(!showCases)}
-          className={`${THEME.primary} text-white px-3 py-1 rounded-lg mb-2 w-full flex items-center justify-between`}
+          onClick={handleCasesToggle}
+          className={`${THEME.primary} text-white px-2 py-1 rounded-lg mb-2 w-full flex items-center justify-between text-sm`}
         >
           <span className={showCases ? '' : 'hidden'}>相关案例 ({relatedCases.length})</span>
           <span className={showCases ? 'hidden' : ''}>📚</span>
           <span>{showCases ? '收起' : ''}</span>
         </button>
         {showCases && (
-          <div className="space-y-2 max-h-[70vh] overflow-y-auto">
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto">
             {relatedCases.map((caseItem, index) => (
               <div 
                 key={index} 
                 id={`case-${index + 1}`}
-                className={`border border-gray-200 rounded p-2 transition-all duration-300 ${
+                className={`border border-gray-200 rounded p-3 transition-all duration-300 hover:shadow-md ${
                   selectedCitation === (index + 1) ? 'ring-2 ring-red-300' : ''
                 }`}
               >
-                <div className="font-bold mb-1">案例 {index + 1}</div>
-                <div className="text-sm">{caseItem}</div>
+                {formatContent(caseItem, index + 1)}
               </div>
             ))}
           </div>
@@ -377,7 +537,29 @@ const Chat = () => {
       }}
     >
       {/* 头部 */}
-      <div className="bg-white/80 shadow-sm p-4 backdrop-blur-sm relative">
+      <div className="bg-white/80 shadow-sm p-4 backdrop-blur-sm relative z-30">
+        <div className="absolute right-4 top-1/2 -translate-y-1/2 flex space-x-2">
+          {isLawMode && (
+            <button
+              onClick={() => handlePanelToggle('settings')}
+              className="text-gray-600 hover:text-gray-800"
+              title="检索设置"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+            </button>
+          )}
+          <button
+            onClick={() => handlePanelToggle('background')}
+            className="text-gray-600 hover:text-gray-800"
+            title="背景设置"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </button>
+        </div>
         <h1 className={`text-2xl font-bold text-center ${THEME.text}`}
             style={{ 
               fontFamily: "'AlibabaPuHuiTi', system-ui, sans-serif",
@@ -391,30 +573,37 @@ const Chat = () => {
             {isLawMode ? '法律顾问模式' : '小浣熊制作'}
           </div>
         </h1>
-        <button
-          onClick={() => setIsCustomizingBg(!isCustomizingBg)}
-          className="absolute right-4 top-4 text-gray-600 hover:text-gray-800"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-        </button>
-        {isCustomizingBg && <BackgroundSettings />}
-        {error && (
-          <div className="mt-2 text-red-500 text-sm text-center">
-            {error}
-          </div>
-        )}
+      </div>
+
+      {/* 创建一个新的容器来包裹所有浮动面板 */}
+      <div 
+        className="fixed inset-0 pointer-events-none z-50"
+        onClick={handleOverlayClick}
+      >
+        {/* 设置面板和背景设置面板 */}
+        <div className="pointer-events-auto">
+          {isLawMode && <SearchSettings />}
+          <BackgroundSettings />
+          <RelatedCases />
+        </div>
       </div>
 
       {/* 消息区域 */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-4 relative z-10">
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center text-gray-500 bg-white/80 backdrop-blur-sm p-6 rounded-lg">
-              <p className="text-xl mb-2">👋 欢迎使用 AI 助手</p>
-              <p>输入消息开始对话吧！</p>
+              {isLawMode ? (
+                <>
+                  <p className="text-xl mb-2">👋 欢迎使用法律助手</p>
+                  <p>请输入您的法律问题</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xl mb-2">✨ 角色设定</p>
+                  <p className="whitespace-pre-wrap">{systemPrompt}</p>
+                </>
+              )}
             </div>
           </div>
         ) : (
@@ -422,7 +611,7 @@ const Chat = () => {
             <div
               key={index}
               className={`mb-4 ${
-                message.role === 'user' ? 'text-right' : 'text-left'
+                message.role === 'user' ? 'text-right pr-4' : 'text-left pl-4'
               }`}
             >
               <div
@@ -459,38 +648,57 @@ const Chat = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* 添加 RelatedCases 组件 */}
-      <RelatedCases />
-
       {/* 输入区域 */}
-      <form onSubmit={handleSubmit} className="p-4 bg-white/80 backdrop-blur-sm border-t border-gray-200">
-        <div className="flex space-x-2">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            className="flex-1 input-cute bg-white/90"
-            placeholder="输入你的问题..."
-          />
-          <button
-            type="button"
-            onClick={() => setIsDeepThinking(!isDeepThinking)}
-            className={`px-4 py-2 rounded-lg transition-all transform hover:scale-105 ${
-              isDeepThinking 
-              ? `${THEME.primary} text-white` 
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-            title="开启后将进行深度案例分析"
-          >
-            {isDeepThinking ? '🧠 深度' : '💭 普通'}
-          </button>
-          <button
-            type="submit"
-            disabled={isLoading}
-            className={`px-6 py-3 ${THEME.primary} text-white rounded-lg disabled:bg-gray-300 transition-all transform hover:scale-105`}
-          >
-            {isLoading ? '发送中...' : '发送'}
-          </button>
+      <form onSubmit={handleSubmit} className="p-4 bg-white/80 backdrop-blur-sm border-t border-gray-200 relative z-0">
+        <div className="flex flex-col space-y-2">
+          {/* 深度思考开关 - 只在法律模式下显示 */}
+          {isLawMode && (
+            <div className="flex items-center space-x-2 px-2">
+              <label className="inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isDeepThinking}
+                  onChange={() => setIsDeepThinking(!isDeepThinking)}
+                  className="hidden"
+                />
+                <div className={`w-5 h-5 border-2 rounded-full flex items-center justify-center transition-colors ${
+                  isDeepThinking 
+                    ? `${THEME.text} border-current` 
+                    : 'border-gray-300'
+                }`}>
+                  {isDeepThinking && (
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/>
+                    </svg>
+                  )}
+                </div>
+                <span className={`ml-2 text-sm ${isDeepThinking ? THEME.text : 'text-gray-600'}`}>
+                  深度思考模式
+                </span>
+              </label>
+              <span className="text-xs text-gray-500">
+                (开启后将进行更详细的案例分析)
+              </span>
+            </div>
+          )}
+
+          {/* 输入框和发送按钮 */}
+          <div className="flex space-x-2">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              className="flex-1 input-cute bg-white/90"
+              placeholder="输入你的问题..."
+            />
+            <button
+              type="submit"
+              disabled={isLoading}
+              className={`px-6 py-3 ${THEME.primary} text-white rounded-lg disabled:bg-gray-300 transition-all transform hover:scale-105`}
+            >
+              {isLoading ? '发送中...' : '发送'}
+            </button>
+          </div>
         </div>
       </form>
     </div>
